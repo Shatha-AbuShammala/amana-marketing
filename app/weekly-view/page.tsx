@@ -93,8 +93,7 @@ function aggregateWeekly(campaigns: Campaign[]) {
 
   for (const c of campaigns) {
     const ts = pullTimeSeries(c);
-    if (ts.length === 0) continue; // نتجاهل الحملات بدون سلسلة زمنية
-
+    if (ts.length === 0) continue; 
     for (const p of ts) {
       const weekKey = p.week || (p.date ? isoWeekKey(new Date(p.date)) : "Unknown");
       const label = weekKey || "Unknown";
