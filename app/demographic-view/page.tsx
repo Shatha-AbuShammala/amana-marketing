@@ -9,7 +9,6 @@ import { fetchMarketingData } from "../../src/lib/api";
 import type { MarketingData, Campaign, DemographicBreakdown } from "../../src/types/marketing";
 import { Users, UserCheck, TrendingUp, Target, DollarSign } from "lucide-react";
 
-/** ---------- Helpers ---------- **/
 
 type Totals = {
   impressions: number;
@@ -21,12 +20,10 @@ type Totals = {
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + (Number(b) || 0), 0);
 
-/** نسبة تخصيص آمنة (تجنّب القسمة على صفر) */
 function safeRatio(part: number, total: number) {
   return total > 0 ? part / total : 0;
 }
 
-/** نحسب إجماليات حسب جندر معين عبر كل الحملات */
 function computeGenderTotals(campaigns: Campaign[], gender: "Male" | "Female"): Totals {
   let impressions = 0, clicks = 0, conversions = 0, spend = 0, revenue = 0;
 
@@ -41,8 +38,6 @@ function computeGenderTotals(campaigns: Campaign[], gender: "Male" | "Female"): 
     impressions += gImpr;
     clicks      += gClicks;
     conversions += gConv;
-
-    // تخصيص إنفاق/إيراد الحملة حسب نسبة clicks للجندر
     const clicksAll = sum(d.map(x => x.performance.clicks)) || c.clicks || 0;
     const share = safeRatio(gClicks, clicksAll);
     spend   += c.spend   * share;
@@ -51,17 +46,14 @@ function computeGenderTotals(campaigns: Campaign[], gender: "Male" | "Female"): 
 
   return { impressions, clicks, conversions, spend, revenue };
 }
-
-/** إجماليات حسب مجموعة عمرية (عبر كل الجنادر) — لإمداد الـ BarCharts */
 function computeAgeSpendRevenue(campaigns: Campaign[]) {
-  // سنجمع clicks لكل age_group لتوزيع spend/revenue عليها
+
   const ageClicks: Record<string, number> = {};
   const ageSpend:  Record<string, number> = {};
   const ageRev:    Record<string, number> = {};
 
   for (const c of campaigns) {
     const d = (c.demographic_breakdown || []) as DemographicBreakdown[];
-    // إجمالي clicks للحملة عبر كل الأعمار
     const totalClicks = sum(d.map(x => x.performance.clicks)) || c.clicks || 0;
 
     for (const row of d) {
@@ -69,15 +61,12 @@ function computeAgeSpendRevenue(campaigns: Campaign[]) {
       const cks = row.performance.clicks || 0;
 
       ageClicks[age] = (ageClicks[age] || 0) + cks;
-
-      // وزّع spend/revenue للحملة على العمر حسب نسبة الـ clicks
       const share = safeRatio(cks, totalClicks);
       ageSpend[age] = (ageSpend[age] || 0) + c.spend   * share;
       ageRev[age]   = (ageRev[age]   || 0) + c.revenue * share;
     }
   }
 
-  // نحضّر بيانات البار بإسم واحد وقيمة واحدة (المكوّن يدعم سلسلة واحدة)
   const spendData = Object.keys(ageSpend).map(age => ({
     label: age,
     value: ageSpend[age],
@@ -87,8 +76,6 @@ function computeAgeSpendRevenue(campaigns: Campaign[]) {
     label: age,
     value: ageRev[age],
   }));
-
-  // ترتيب اختياري (بالأعمار تصاعديًا لو كانت على شكل "18-24")
   const normalize = (s: string) => parseInt(s.split("-")[0] || "0", 10);
   spendData.sort((a, b) => normalize(a.label) - normalize(b.label));
   revenueData.sort((a, b) => normalize(a.label) - normalize(b.label));
@@ -96,7 +83,6 @@ function computeAgeSpendRevenue(campaigns: Campaign[]) {
   return { spendData, revenueData };
 }
 
-/** نبني صفوف جدول (ageGroup + campaign) لجندر معيّن */
 function buildAgeCampaignRows(campaigns: Campaign[], gender: "Male" | "Female") {
   type Row = {
     age: string;
@@ -114,10 +100,8 @@ function buildAgeCampaignRows(campaigns: Campaign[], gender: "Male" | "Female") 
   for (const c of campaigns) {
     const d = (c.demographic_breakdown || []) as DemographicBreakdown[];
 
-    // حنجمع حسب العمر داخل الحملة الواحدة
-    const clicksAll = sum(d.map(x => x.performance.clicks)) || c.clicks || 0;
 
-    // نأخذ فقط صفوف هذا الجندر
+    const clicksAll = sum(d.map(x => x.performance.clicks)) || c.clicks || 0;
     const byAge = new Map<string, { impr: number; clk: number; conv: number; spend: number; rev: number }>();
 
     for (const row of d) {
@@ -136,8 +120,6 @@ function buildAgeCampaignRows(campaigns: Campaign[], gender: "Male" | "Female") 
       s.rev   += c.revenue * share;
       byAge.set(age, s);
     }
-
-    // نولد صفًا لكل (ageGroup, campaign)
     for (const [age, agg] of byAge) {
       const ctr = agg.impr > 0 ? (agg.clk / agg.impr) * 100 : 0;
       const convRate = agg.clk > 0 ? (agg.conv / agg.clk) * 100 : 0;
@@ -155,7 +137,7 @@ function buildAgeCampaignRows(campaigns: Campaign[], gender: "Male" | "Female") 
     }
   }
 
-  // ترتيب مريح: بالعمر ثم بالإيراد
+
   const normalize = (s: string) => parseInt(s.split("-")[0] || "0", 10);
   rows.sort((a, b) => normalize(a.age) - normalize(b.age) || b.revenue - a.revenue);
   return rows;
@@ -167,8 +149,6 @@ export default function DemographicView() {
   const [data, setData] = useState<MarketingData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // تحميل البيانات (نفس أسلوب CampaignView)
   useEffect(() => {
     const load = async () => {
       try {
@@ -184,7 +164,7 @@ export default function DemographicView() {
     load();
   }, []);
 
-  // حسابات مشتقة من البيانات
+
   const {
     maleTotals, femaleTotals, spendByAge, revenueByAge, maleRows, femaleRows,
   } = useMemo(() => {
